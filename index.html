@@ -30,7 +30,7 @@
       if (id) {
         document.querySelector("#message").textContent = "Your hosted image is ready to view or share.";
         const image = document.createElement("img");
-        image.src = `/api/image?id=${encodeURIComponent(id)}`;
+        image.src = `/api/file?id=${encodeURIComponent(id)}`;
         image.alt = "Hosted upload";
         image.addEventListener("error", () => {
           document.querySelector("#message").textContent = "This image could not be found or the image server is offline.";
