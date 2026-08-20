@@ -25,7 +25,8 @@
       <div class="viewer" id="viewer"><div class="empty">No image selected.</div></div>
     </main>
     <script>
-      const id = new URLSearchParams(location.search).get("id");
+      const pathId = location.pathname.match(/^\/image\/([0-9a-f-]+)$/i)?.[1];
+      const id = pathId || new URLSearchParams(location.search).get("id");
       if (id) {
         document.querySelector("#message").textContent = "Your hosted image is ready to view or share.";
         const image = document.createElement("img");
