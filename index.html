@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Host</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #0b1020; color: #eef2ff; }
+      main { width: min(760px, calc(100% - 40px)); padding: 42px; border: 1px solid #283457; border-radius: 28px; background: linear-gradient(145deg, #151d36, #0e1428); box-shadow: 0 24px 80px #0006; }
+      .eyebrow { color: #8ea7ff; letter-spacing: .14em; text-transform: uppercase; font-size: 12px; font-weight: 800; }
+      h1 { font-size: clamp(42px, 8vw, 76px); line-height: .95; margin: 16px 0; }
+      p { color: #b8c2de; font-size: 18px; line-height: 1.6; }
+      .viewer { margin-top: 28px; border-radius: 18px; overflow: hidden; background: #080c18; min-height: 180px; display: grid; place-items: center; }
+      img { display: block; max-width: 100%; max-height: 70vh; }
+      .empty { padding: 42px; color: #8793b5; text-align: center; }
+      code { color: #a9bcff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Image Host</div>
+      <h1>Share images without the clutter.</h1>
+      <p id="message">Use <code>/upload</code> in Discord, then open the link it gives you.</p>
+      <div class="viewer" id="viewer"><div class="empty">No image selected.</div></div>
+    </main>
+    <script>
+      const id = new URLSearchParams(location.search).get("id");
+      if (id) {
+        document.querySelector("#message").textContent = "Your hosted image is ready to view or share.";
+        const image = document.createElement("img");
+        image.src = `/api/image?id=${encodeURIComponent(id)}`;
+        image.alt = "Hosted upload";
+        image.addEventListener("error", () => {
+          document.querySelector("#message").textContent = "This image could not be found or the image server is offline.";
+          document.querySelector("#viewer").innerHTML = '<div class="empty">Image unavailable.</div>';
+        });
+        document.querySelector("#viewer").replaceChildren(image);
+      }
+    </script>
+  </body>
+</html>
