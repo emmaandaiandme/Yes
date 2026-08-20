@@ -3,8 +3,11 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/image/:id",
-      "destination": "/api/file?id=:id"
+      "source": "/image/(.*)",
+      "destination": "/api/file?id=$1"
     }
-  ]
+  ],
+  "env": {
+    "BACKEND_URL": "https://d779b756-da5d-40f3-8ab2-c924cc4280b8-00-3uo1y41vn19mz.archer.replit.dev"
+  }
 }
