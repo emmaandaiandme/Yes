@@ -8,6 +8,6 @@
     }
   ],
   "env": {
-    "BACKEND_URL": "http://zac.hidencloud.com:24719"
+    "BACKEND_URL": "http://92.118.206.166:30237"
   }
 }
