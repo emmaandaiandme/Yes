@@ -64,7 +64,6 @@
          const request = new XMLHttpRequest();
          request.open("POST", endpoint);
          request.timeout = 120000;
-         request.setRequestHeader("X-Upload-Mode", "chunked");
          request.upload.addEventListener("progress", (event) => {
            if (!event.lengthComputable) return;
            const uploaded = Math.min(totalBytes, uploadedBytes + event.loaded);
@@ -98,7 +97,12 @@
          form.append("total", String(chunkCount));
          form.append("filename", file.name);
          form.append("contentType", file.type);
-         result = await uploadChunk(new URL(apiEndpoint, location.href), form, index, chunkCount, start, file.size);
+          const chunkEndpoint = new URL(apiEndpoint, location.href);
+          // Use the query flag instead of a custom header. This keeps uploads
+          // simple on mobile browsers and avoids a CORS preflight through the
+          // Vercel proxy before every multipart chunk.
+          chunkEndpoint.searchParams.set("chunk", String(index));
+          result = await uploadChunk(chunkEndpoint, form, index, chunkCount, start, file.size);
        }
        return result;
      }
