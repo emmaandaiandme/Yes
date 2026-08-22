@@ -1,0 +1,305 @@
+const express = require("express");
+const multer = require("multer");
+const path = require("node:path");
+const fs = require("node:fs");
+const crypto = require("node:crypto");
+const Database = require("better-sqlite3");
+
+const app = express();
+const PORT = Number(process.env.PORT || 5000);
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_MORE_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_ARCHIVE_SIZE = 70 * 1024 * 1024;
+const uploadDirectory = path.join(__dirname, "uploads");
+const fileDirectory = path.join(uploadDirectory, "files");
+const supportedTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+  "image/avif",
+  "image/tiff",
+]);
+const signatures = {
+  "image/png": (buffer) => buffer.length >= 24
+    && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    && buffer.toString("ascii", 12, 16) === "IHDR",
+  "image/jpeg": (buffer) => buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
+  "image/gif": (buffer) => buffer.length >= 6 && ["GIF87a", "GIF89a"].includes(buffer.toString("ascii", 0, 6)),
+  "image/webp": (buffer) => buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP",
+  "image/bmp": (buffer) => buffer.length >= 2 && buffer.toString("ascii", 0, 2) === "BM",
+  "image/tiff": (buffer) => buffer.length >= 4 && ["49492a00", "4d4d002a"].includes(buffer.subarray(0, 4).toString("hex")),
+  "image/avif": (buffer) => buffer.length >= 12 && buffer.toString("ascii", 4, 8) === "ftyp"
+    && ["avif", "avis", "mif1", "msf1"].includes(buffer.toString("ascii", 8, 12)),
+};
+const isValidImageBuffer = (buffer, contentType) => Boolean(signatures[contentType]?.(buffer));
+
+fs.mkdirSync(uploadDirectory, { recursive: true });
+fs.mkdirSync(fileDirectory, { recursive: true });
+const db = new Database(path.join(uploadDirectory, "data.db"));
+db.pragma("journal_mode = WAL");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS hosted_images (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    created_at TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE
+  );
+  CREATE TABLE IF NOT EXISTS hosted_files (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    stored_name TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE
+  );
+  CREATE INDEX IF NOT EXISTS hosted_files_created_at_idx ON hosted_files (created_at DESC);
+`);
+
+const storage = multer.diskStorage({
+  destination: (_request, _file, callback) => callback(null, uploadDirectory),
+  filename: (_request, _file, callback) => callback(null, `${crypto.randomUUID()}.upload`),
+});
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_SIZE, files: 1 },
+  fileFilter: (_request, file, callback) => {
+    if (!supportedTypes.has(file.mimetype)) {
+      return callback(new Error("Unsupported image type. Use PNG, JPG, GIF, WebP, BMP, AVIF, or TIFF."));
+    }
+    callback(null, true);
+  },
+});
+const moreUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_MORE_FILE_SIZE, files: 1 },
+  fileFilter: (_request, file, callback) => {
+    if (!supportedTypes.has(file.mimetype)) return callback(new Error("Unsupported image type."));
+    callback(null, true);
+  },
+});
+const archiveExtensions = new Set([".zip", ".tar.xz", ".rar", ".7z"]);
+const archiveUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_request, _file, callback) => callback(null, fileDirectory),
+    filename: (_request, _file, callback) => callback(null, `${crypto.randomUUID()}.upload`),
+  }),
+  limits: { fileSize: MAX_ARCHIVE_SIZE, files: 1 },
+  fileFilter: (_request, file, callback) => {
+    const name = String(file.originalname || "").toLowerCase();
+    if (!Array.from(archiveExtensions).some((extension) => name.endsWith(extension))) {
+      return callback(new Error("Unsupported archive. Use .zip, .tar.xz, .rar, or .7z."));
+    }
+    callback(null, true);
+  },
+});
+
+app.disable("x-powered-by");
+app.use(express.json({ limit: "100kb" }));
+app.use(express.static(__dirname, { extensions: ["html"] }));
+
+app.get("/api/health", async (_request, response) => {
+  try {
+    db.prepare("SELECT 1").get();
+    response.json({ ok: true, service: "image-host", storage: "shared" });
+  } catch (error) {
+    console.error("Health check failed:", error.message);
+    response.status(503).json({ ok: false, error: "Database unavailable" });
+  }
+});
+
+app.post("/api/upload", (request, response) => {
+  upload.single("image")(request, response, async (error) => {
+    if (error) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        return response.status(413).json({ error: "That image is larger than the 20 MB Discord upload limit. Use /more for larger images." });
+      }
+      return response.status(400).json({ error: error.message || "Upload failed." });
+    }
+
+    if (!request.file) {
+      return response.status(400).json({ error: "Choose an image to upload." });
+    }
+    if (!isValidImageBuffer(request.file.buffer, request.file.mimetype)) {
+      return response.status(400).json({ error: "The file contents do not match a supported image type." });
+    }
+
+    const id = crypto.randomUUID();
+    try {
+      const originalName = request.file.originalname.slice(0, 500);
+      db.prepare(
+        `INSERT INTO hosted_images
+          (id, owner_id, original_name, content_type, size_bytes, data, created_at, slug)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        "website",
+        originalName,
+        request.file.mimetype,
+        request.file.size,
+        request.file.buffer,
+        new Date().toISOString(),
+        id,
+      );
+      response.status(201).json({
+        id,
+        name: originalName,
+        size: request.file.size,
+        url: `/image/${id}`,
+      });
+    } catch (dbError) {
+      console.error("Could not save upload metadata:", dbError);
+      response.status(500).json({ error: "The image could not be saved. Please try again." });
+    }
+  });
+});
+
+app.post("/api/more-upload", (request, response) => {
+  moreUpload.single("image")(request, response, async (error) => {
+    if (error) {
+      if (error.code === "LIMIT_FILE_SIZE") return response.status(413).json({ error: "That image is larger than the 100 MB limit." });
+      return response.status(400).json({ error: error.message || "Upload failed." });
+    }
+    if (!request.file) return response.status(400).json({ error: "Choose an image to upload." });
+    if (!isValidImageBuffer(request.file.buffer, request.file.mimetype)) {
+      return response.status(400).json({ error: "The file contents do not match a supported image type." });
+    }
+    const id = crypto.randomUUID();
+    try {
+      const ownerId = String(request.body?.owner || "web").slice(0, 100);
+      const originalName = request.file.originalname.slice(0, 500);
+      db.prepare(
+        `INSERT INTO hosted_images
+          (id, owner_id, original_name, content_type, size_bytes, data, created_at, slug)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(id, ownerId, originalName, request.file.mimetype, request.file.size, request.file.buffer, new Date().toISOString(), id);
+      response.status(201).json({ id, name: originalName, size: request.file.size, url: `/image/${id}` });
+    } catch (dbError) {
+      console.error("Could not save larger upload:", dbError);
+      response.status(500).json({ error: "The image could not be saved. Please try again." });
+    }
+  });
+});
+
+app.post("/api/files", (request, response) => {
+  archiveUpload.single("file")(request, response, async (error) => {
+    if (error) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        return response.status(413).json({ error: "That file is larger than the 70 MB limit." });
+      }
+      return response.status(400).json({ error: error.message || "File upload failed." });
+    }
+    if (!request.file) return response.status(400).json({ error: "Choose an archive file to upload." });
+
+    const id = crypto.randomUUID();
+    let slug;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const candidate = `host-p${String(crypto.randomInt(100, 1000))}`;
+      if (!db.prepare("SELECT 1 FROM hosted_files WHERE slug = ?").get(candidate)
+        && !db.prepare("SELECT 1 FROM hosted_images WHERE slug = ?").get(candidate)) {
+        slug = candidate;
+        break;
+      }
+    }
+    if (!slug) {
+      await fs.promises.rm(request.file.path, { force: true });
+      return response.status(503).json({ error: "Could not create a unique file link. Try again." });
+    }
+
+    try {
+      db.prepare(
+        `INSERT INTO hosted_files
+          (id, owner_id, original_name, content_type, size_bytes, stored_name, created_at, slug)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        "api",
+        request.file.originalname.slice(0, 500),
+        request.file.mimetype || "application/octet-stream",
+        request.file.size,
+        path.basename(request.file.filename),
+        new Date().toISOString(),
+        slug,
+      );
+      response.status(201).json({
+        id,
+        slug,
+        name: request.file.originalname,
+        size: request.file.size,
+        url: `/file/${slug}`,
+      });
+    } catch (dbError) {
+      await fs.promises.rm(request.file.path, { force: true });
+      console.error("Could not save file metadata:", dbError);
+      response.status(500).json({ error: "The file could not be saved. Please try again." });
+    }
+  });
+});
+
+async function serveImage(request, response) {
+  const id = String(request.params.id || "");
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/i.test(id)) return response.status(400).send("Invalid image ID");
+
+  try {
+    const image = db.prepare(
+      `SELECT content_type, original_name, size_bytes, data
+       FROM hosted_images WHERE id = ? OR slug = ?
+       ORDER BY CASE WHEN slug = ? THEN 0 ELSE 1 END LIMIT 1`,
+    ).get(id, id, id);
+    if (!image) return response.status(404).send("Image not found");
+    response.setHeader("Content-Type", image.content_type);
+    response.setHeader("Content-Length", String(image.size_bytes));
+    response.setHeader("Content-Disposition", `inline; filename="${image.original_name.replace(/["\r\n]/g, "")}"`);
+    response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    if (request.method === "HEAD") return response.end();
+    response.end(image.data);
+  } catch (error) {
+    console.error("Image read failed:", error);
+    response.status(500).send("Image unavailable");
+  }
+}
+
+app.get("/image/:id", serveImage);
+app.head("/image/:id", serveImage);
+
+async function serveFile(request, response) {
+  const slug = String(request.params.slug || "");
+  if (!/^host-p[0-9]{3}$/i.test(slug)) return response.status(400).send("Invalid file ID");
+  try {
+    const file = db.prepare(
+      "SELECT content_type, original_name, size_bytes, stored_name FROM hosted_files WHERE slug = ?",
+    ).get(slug);
+    if (!file) return response.status(404).send("File not found");
+    const filePath = path.join(fileDirectory, path.basename(file.stored_name));
+    if (!fs.existsSync(filePath)) return response.status(404).send("File data not found");
+    response.setHeader("Content-Type", file.content_type || "application/octet-stream");
+    response.setHeader("Content-Length", String(file.size_bytes));
+    response.setHeader("Content-Disposition", `attachment; filename="${file.original_name.replace(/["\r\n]/g, "")}"`);
+    response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    if (request.method === "HEAD") return response.end();
+    response.sendFile(filePath);
+  } catch (error) {
+    console.error("File read failed:", error);
+    response.status(500).send("File unavailable");
+  }
+}
+
+app.get("/file/:slug", serveFile);
+app.head("/file/:slug", serveFile);
+
+app.use((error, _request, response, _next) => {
+  console.error("Unhandled server error:", error);
+  response.status(500).json({ error: "Unexpected server error." });
+});
+
+app.listen(PORT, "0.0.0.0", () => console.log(`Image Host running on port ${PORT}`));
