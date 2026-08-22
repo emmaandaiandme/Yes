@@ -14,9 +14,9 @@
 <body>
   <main class="shell"><div class="brand"><span class="mark">IH</span><span>Image Host</span></div><section class="card">
     <div class="eyebrow">Private upload room</div><h1>Share a larger image.</h1>
-      <p>Upload an image from a valid bot-issued link and get a shareable link immediately. Your image is saved securely and the link is stored for this device.</p>
+      <p>Upload one supported image from 1 KB up to 50 MB. Larger files are sent in small 1 MB chunks, saved securely, and the shareable link is stored on this device.</p>
      <label class="drop" id="drop" for="image"><span class="drop-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span><span><strong id="file-name">Choose an image</strong><small>PNG, JPG, GIF, WebP, BMP, AVIF, or TIFF</small></span><input id="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif,image/tiff"></label>
-      <div class="limits"><span>1 KB minimum</span><span>Direct upload</span><span>No website size check</span></div>
+      <div class="limits"><span>1 KB minimum</span><span>1 MB chunks</span><span>50 MB maximum</span></div>
       <button class="button" id="submit" type="button"><svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg><svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-opacity=".35"/><path d="M21 12a9 9 0 0 0-9-9"/></svg><span id="button-label">Upload image</span></button><div class="meter" aria-hidden="true"><span id="progress"></span></div><div class="status" id="status" role="status" aria-live="polite"></div><div class="history" id="history" hidden><h2>Saved on this device</h2><ul class="history-list" id="history-list"></ul></div><p class="note">This link expires as soon as this page is opened or after the upload completes. Need another upload? Use <strong>/more</strong> in Discord.</p>
   </section></main>
   <script>
@@ -44,10 +44,10 @@
      drop.addEventListener("drop", (event) => { if (event.dataTransfer.files[0]) { input.files = event.dataTransfer.files; input.dispatchEvent(new Event("change")); } });
      function formatSize(bytes) { return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(bytes % (1024 * 1024) ? 1 : 0)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`; }
      const historyKey = "image-host-upload-history";
-     function readHistory() { try { return JSON.parse(localStorage.getItem(historyKey) || "[]").filter((item) => item && item.url).slice(0, 10); } catch { return []; } }
+     function readHistory() { try { return JSON.parse(localStorage.getItem(historyKey) || "[]").filter((item) => item && item.url); } catch { return []; } }
      function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (character) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[character]); }
      function renderHistory() { const history = readHistory(); document.querySelector("#history").hidden = !history.length; document.querySelector("#history-list").innerHTML = history.map((item) => `<li><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.name || item.url)}</a><small>${escapeHtml(item.url)}</small></li>`).join(""); }
-     function saveToDevice(item) { try { localStorage.setItem(historyKey, JSON.stringify([item, ...readHistory().filter((saved) => saved.url !== item.url)].slice(0, 10))); } catch {} renderHistory(); }
+     function saveToDevice(item) { try { localStorage.setItem(historyKey, JSON.stringify([item, ...readHistory().filter((saved) => saved.url !== item.url)])); } catch {} renderHistory(); }
      renderHistory();
       if (!/^upload-[a-z0-9-]+$/i.test(session)) {
         input.disabled = true;
@@ -59,19 +59,17 @@
        if (/^upload-[a-z0-9-]+$/i.test(session)) return session;
        throw new Error("This upload page is protected. Use /more in Discord, or ask the bot owner for an owner upload link.");
      }
-     async function uploadFile(file) {
-       await ensureSession();
-       const form = new FormData();
-       form.append("image", file, file.name);
-       form.append("session", session);
+     function uploadChunk(endpoint, form, chunkNumber, chunkCount, uploadedBytes, totalBytes) {
        return new Promise((resolve, reject) => {
          const request = new XMLHttpRequest();
-         request.open("POST", new URL(apiEndpoint, location.href));
+         request.open("POST", endpoint);
          request.timeout = 120000;
+         request.setRequestHeader("X-Upload-Mode", "chunked");
          request.upload.addEventListener("progress", (event) => {
            if (!event.lengthComputable) return;
-           const percent = Math.round((event.loaded / event.total) * 100);
-           status.textContent = `Uploading image · ${percent}%`;
+           const uploaded = Math.min(totalBytes, uploadedBytes + event.loaded);
+           const percent = Math.round((uploaded / totalBytes) * 100);
+           status.textContent = `Uploading image · ${percent}% (part ${chunkNumber + 1} of ${chunkCount})`;
            progress.style.width = `${percent}%`;
          });
          request.addEventListener("load", () => {
@@ -85,6 +83,25 @@
          request.send(form);
        });
      }
+     async function uploadFile(file) {
+       await ensureSession();
+       const chunkSize = 1 * 1024 * 1024;
+       const chunkCount = Math.ceil(file.size / chunkSize);
+       let result = {};
+       for (let index = 0; index < chunkCount; index += 1) {
+         const start = index * chunkSize;
+         const end = Math.min(file.size, start + chunkSize);
+         const form = new FormData();
+         form.append("chunk", file.slice(start, end), file.name);
+         form.append("session", session);
+         form.append("index", String(index));
+         form.append("total", String(chunkCount));
+         form.append("filename", file.name);
+         form.append("contentType", file.type);
+         result = await uploadChunk(new URL(apiEndpoint, location.href), form, index, chunkCount, start, file.size);
+       }
+       return result;
+     }
      function finishUploadRoom() {
        drop.hidden = true;
        document.querySelector(".limits").hidden = true;
@@ -96,6 +113,7 @@
       const file = input.files[0];
       if (!file) { status.textContent = "Choose an image first."; status.className = "error"; return; }
        if (file.size < 1024) { status.textContent = "This image is smaller than the 1 KB minimum."; status.className = "error"; return; }
+       if (file.size > 50 * 1024 * 1024) { status.textContent = "This image is larger than the 50 MB maximum."; status.className = "error"; return; }
       if (!/^image\/(png|jpeg|gif|webp|bmp|avif|tiff)$/i.test(file.type)) { status.textContent = "Please choose a PNG, JPG, GIF, WebP, BMP, AVIF, or TIFF image."; status.className = "error"; return; }
        button.disabled = true; button.classList.add("is-loading"); buttonLabel.textContent = "Preparing upload…"; status.textContent = "Preparing secure upload…"; status.className = ""; progress.style.width = "2%";
       try {
