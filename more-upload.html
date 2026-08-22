@@ -48,7 +48,7 @@
         form.append("total", String(total));
         form.append("filename", file.name);
         form.append("contentType", file.type);
-         const response = await fetch(`${apiEndpoint}?chunk=${index}`, { method: "POST", headers: { "X-Upload-Mode": "chunked" }, body: form });
+         const response = await fetch(`${apiEndpoint}?chunk=${index}`, { method: "POST", body: form });
         let result = {};
         try { result = await response.json(); } catch { /* expired page or proxy error */ }
         if (!response.ok) throw new Error(result.error || `Upload failed (${response.status}).`);
