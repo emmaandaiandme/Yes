@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Host · Larger upload</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color:#172033;background:#f5f7fb;--accent:#635bff;--teal:#159f8b;--muted:#667085;--line:#dfe5ef}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px;background:radial-gradient(circle at 82% 0,#e8e3ff 0,transparent 34rem),#f5f7fb;color:#172033}.shell{width:min(680px,100%);margin:6vh auto}.brand{display:flex;align-items:center;gap:10px;margin-bottom:20px;font-weight:800;letter-spacing:-.03em}.mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--teal));color:#fff;font-weight:900}.card{padding:clamp(26px,6vw,52px);border:1px solid var(--line);border-radius:28px;background:rgba(255,255,255,.9);box-shadow:0 24px 80px #52607d1c}h1{margin:0 0 12px;font-size:clamp(32px,6vw,52px);line-height:1;letter-spacing:-.065em}p{margin:0;color:var(--muted);line-height:1.65}.eyebrow{margin-bottom:14px;color:var(--teal);font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.drop{display:flex;align-items:center;gap:16px;margin:30px 0 14px;padding:24px;border:2px dashed #c7cedb;border-radius:18px;cursor:pointer;transition:.2s}.drop:hover,.drop:focus-within{border-color:var(--accent);background:#faf9ff}.drop-icon{display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:14px;background:#eeeaff;color:var(--accent);font-size:24px}.drop strong{display:block;margin-bottom:3px}.drop small{color:var(--muted)}input{display:none}.button{width:100%;border:0;border-radius:14px;padding:15px;background:var(--accent);color:#fff;font:inherit;font-weight:800;cursor:pointer;box-shadow:0 8px 20px #635bff30;transition:.2s}.button:hover{background:#5149eb;transform:translateY(-1px)}button:disabled{opacity:.65;cursor:wait;transform:none}.meter{height:8px;margin-top:22px;overflow:hidden;border-radius:99px;background:#eceef4}.meter span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--teal));transition:width .15s}.status{min-height:26px;margin-top:16px;word-break:break-word}.success{color:#16856f}.error{color:#c0392b}.result{display:inline-block;margin-top:8px;color:var(--accent);font-weight:700;word-break:break-all}.note{margin-top:22px;font-size:13px;color:#98a2b3}@media(max-width:520px){body{padding:14px}.shell{margin:2vh auto}.card{border-radius:22px}.drop{padding:18px}}
+  </style>
+</head>
+<body>
+  <main class="shell"><div class="brand"><span class="mark">IH</span><span>Image Host</span></div><section class="card">
+    <div class="eyebrow">Private upload room</div><h1>Share a larger image.</h1>
+    <p>Upload one supported image up to 100 MB. This secure page can only be used once, so your link stays private.</p>
+    <label class="drop" for="image"><span class="drop-icon">↑</span><span><strong id="file-name">Choose an image</strong><small>PNG, JPG, GIF, WebP, BMP, AVIF, or TIFF · max 100 MB</small></span><input id="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif,image/tiff"></label>
+    <button class="button" id="submit" type="button">Upload image</button><div class="meter" aria-hidden="true"><span id="progress"></span></div><div class="status" id="status" role="status" aria-live="polite"></div><p class="note">This link expires as soon as this page is opened or after the upload completes. Need another upload? Use <strong>/more</strong> in Discord.</p>
+  </section></main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const session = location.pathname.split("/").pop();
+    const apiEndpoint = params.get("api") || "/api/more-upload";
+    const input = document.querySelector("#image");
+    const button = document.querySelector("#submit");
+    const status = document.querySelector("#status");
+    input.addEventListener("change", () => {
+      document.querySelector("#file-name").textContent = input.files[0] ? input.files[0].name : "Choose an image";
+      status.className = "";
+    });
+    function uploadFile(file) {
+      return new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", apiEndpoint);
+        request.timeout = 10 * 60 * 1000;
+        request.responseType = "json";
+        request.upload.onprogress = (event) => {
+          if (event.lengthComputable) { const percent = Math.round(event.loaded / event.total * 100); status.textContent = `Uploading… ${percent}%`; document.querySelector("#progress").style.width = `${percent}%`; }
+        };
+        request.onload = () => {
+          const result = request.response || (() => { try { return JSON.parse(request.responseText); } catch { return {}; } })();
+          if (request.status >= 200 && request.status < 300) resolve(result);
+          else reject(new Error(result.error || `Upload failed (${request.status}).`));
+        };
+        request.onerror = () => reject(new Error("The upload connection failed. Check your connection and try again."));
+        request.ontimeout = () => reject(new Error("The upload timed out. Try a smaller image or a more stable connection."));
+        const form = new FormData();
+        form.append("image", file);
+        form.append("session", session);
+        request.send(form);
+      });
+    }
+    button.addEventListener("click", async () => {
+      const file = input.files[0];
+      if (!file) { status.textContent = "Choose an image first."; status.className = "error"; return; }
+      if (file.size > 100 * 1024 * 1024) { status.textContent = "This image is larger than the 100 MB limit."; status.className = "error"; return; }
+      if (!/^image\/(png|jpeg|gif|webp|bmp|avif|tiff)$/i.test(file.type)) { status.textContent = "Please choose a PNG, JPG, GIF, WebP, BMP, AVIF, or TIFF image."; status.className = "error"; return; }
+      button.disabled = true; status.textContent = "Preparing secure upload…"; status.className = ""; document.querySelector("#progress").style.width = "2%";
+      try {
+        const result = await uploadFile(file);
+        const apiOrigin = new URL(apiEndpoint, location.href).origin;
+        const url = new URL(result.url, apiOrigin).href;
+        status.className = "success";
+        document.querySelector("#progress").style.width = "100%"; status.innerHTML = `Uploaded successfully.<br><a class="result" href="${url}" target="_blank" rel="noopener">${url}</a>`;
+      } catch (error) { status.textContent = error.message; status.className = "error"; }
+      finally { button.disabled = false; }
+    });
+  </script>
+</body>
+</html>
