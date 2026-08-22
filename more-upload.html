@@ -84,7 +84,14 @@
       }
       return uploaded;
     }
-    button.addEventListener("click", async () => {
+     function finishUploadRoom() {
+       drop.hidden = true;
+       document.querySelector(".limits").hidden = true;
+       button.hidden = true;
+       progress.style.width = "100%";
+       document.querySelector(".note").innerHTML = "<strong>Upload complete.</strong> Go back to Discord and use <strong>/more</strong> when you want to upload another image.";
+     }
+     button.addEventListener("click", async () => {
       const file = input.files[0];
       if (!file) { status.textContent = "Choose an image first."; status.className = "error"; return; }
        if (file.size < 1024) { status.textContent = "This image is smaller than the 1 KB minimum."; status.className = "error"; return; }
@@ -96,10 +103,11 @@
         const apiOrigin = new URL(apiEndpoint, location.href).origin;
         const url = new URL(result.url, apiOrigin).href;
         status.className = "success";
-         progress.style.width = "100%"; status.innerHTML = `Uploaded successfully.<br><a class="result" href="${url}" target="_blank" rel="noopener">${url}</a>`;
+          status.innerHTML = `Uploaded successfully.<br><a class="result" href="${url}" target="_blank" rel="noopener">${url}</a>`;
+          finishUploadRoom();
       } catch (error) { status.textContent = error.message; status.className = "error"; }
        finally { button.disabled = false; button.classList.remove("is-loading"); buttonLabel.textContent = "Upload image"; }
     });
   </script>
 </body>
-</html>
+</html>/
