@@ -69,7 +69,7 @@
            if (!event.lengthComputable) return;
            const uploaded = Math.min(totalBytes, uploadedBytes + event.loaded);
            const percent = Math.round((uploaded / totalBytes) * 100);
-           status.textContent = `Uploading image · ${percent}% (part ${chunkNumber + 1} of ${chunkCount})`;
+           status.textContent = `Uploading image · ${percent}%`;
            progress.style.width = `${percent}%`;
          });
          request.addEventListener("load", () => {
