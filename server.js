@@ -80,6 +80,11 @@ db.exec(`
     used_at TEXT
   );
   CREATE INDEX IF NOT EXISTS more_upload_sessions_expiry_idx ON more_upload_sessions (expires_at);
+   CREATE TABLE IF NOT EXISTS more_upload_access_codes (
+     owner_id TEXT PRIMARY KEY,
+     code TEXT NOT NULL UNIQUE,
+     created_at TEXT NOT NULL
+   );
 `);
 if (!db.pragma("table_info(hosted_images)").some((column) => column.name === "view_count")) {
   db.exec("ALTER TABLE hosted_images ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0");
@@ -173,6 +178,18 @@ app.get("/api/health", async (_request, response) => {
     console.error("Health check failed:", error.message);
     response.status(503).json({ ok: false, error: "Database unavailable" });
   }
+});
+
+app.post("/api/more-auth", (request, response) => {
+  const code = String(request.body?.code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) return response.status(401).json({ error: "Enter the 6-character code from Discord." });
+  const owner = db.prepare("SELECT owner_id FROM more_upload_access_codes WHERE code = ?").get(code);
+  if (!owner) return response.status(401).json({ error: "That code is incorrect." });
+  const now = new Date();
+  const token = `upload-${owner.owner_id}-${crypto.randomBytes(5).toString("hex")}`;
+  db.prepare("INSERT INTO more_upload_sessions (token, owner_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
+    .run(token, owner.owner_id, now.toISOString(), new Date(now.getTime() + 60 * 60 * 1000).toISOString());
+  response.json({ session: token });
 });
 
 app.get("/api/more-page", (request, response) => {
@@ -401,54 +418,4 @@ async function serveImage(request, response) {
        FROM hosted_images WHERE id = ? OR slug = ?
        ORDER BY CASE WHEN slug = ? THEN 0 ELSE 1 END LIMIT 1`,
     ).get(id, id, id);
-    if (!image) return response.status(404).send("Image not found");
-     db.prepare("UPDATE hosted_images SET view_count = view_count + 1 WHERE id = ? OR slug = ?").run(id, id);
-    response.setHeader("Content-Type", image.content_type);
-    response.setHeader("Content-Length", String(image.size_bytes));
-    response.setHeader("Content-Disposition", `inline; filename="${image.original_name.replace(/["\r\n]/g, "")}"`);
-    response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    if (request.method === "HEAD") return response.end();
-    response.end(image.data);
-  } catch (error) {
-    console.error("Image read failed:", error);
-    response.status(500).send("Image unavailable");
-  }
-}
-
-app.get("/image/:id", serveImage);
-app.head("/image/:id", serveImage);
-
-async function serveFile(request, response) {
-  const slug = String(request.params.slug || "");
-  if (!/^host-p[0-9]{3}$/i.test(slug)) return response.status(400).send("Invalid file ID");
-  try {
-    const file = db.prepare(
-      "SELECT content_type, original_name, size_bytes, stored_name, data FROM hosted_files WHERE slug = ?",
-    ).get(slug);
-    if (!file) return response.status(404).send("File not found");
-    const filePath = path.join(fileDirectory, path.basename(file.stored_name));
-    if (!file.data && !fs.existsSync(filePath)) return response.status(404).send("File data not found");
-    response.setHeader("Content-Type", file.content_type || "application/octet-stream");
-    response.setHeader("Content-Length", String(file.size_bytes));
-    response.setHeader("Content-Disposition", `attachment; filename="${file.original_name.replace(/["\r\n]/g, "")}"`);
-    response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    if (request.method === "HEAD") return response.end();
-    if (file.data) return response.end(file.data);
-    response.sendFile(filePath);
-  } catch (error) {
-    console.error("File read failed:", error);
-    response.status(500).send("File unavailable");
-  }
-}
-
-app.get("/file/:slug", serveFile);
-app.head("/file/:slug", serveFile);
-
-app.use((error, _request, response, _next) => {
-  console.error("Unhandled server error:", error);
-  response.status(500).json({ error: "Unexpected server error." });
-});
-
-app.listen(PORT, "0.0.0.0", () => console.log(`Image Host running on port ${PORT}`));
+    if (!image) return response.status(404).send("Image not f
