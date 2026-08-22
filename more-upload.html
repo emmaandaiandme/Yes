@@ -3,139 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <title>Image Host · Larger upload</title>
+  <title>Image Host · Upload</title>
   <style>
-    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color:#172033;background:#f5f7fb;--accent:#635bff;--teal:#159f8b;--muted:#667085;--line:#dfe5ef}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px;background:radial-gradient(circle at 82% 0,#e8e3ff 0,transparent 34rem),#f5f7fb;color:#172033}.shell{width:min(680px,100%);margin:clamp(20px,8vh,84px) auto}.brand{display:flex;align-items:center;gap:10px;margin-bottom:20px;font-weight:800;letter-spacing:-.03em}.mark{display:grid;place-items:center;width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,var(--accent),var(--teal));color:#fff;font-weight:900;box-shadow:0 8px 18px #635bff35}.card{padding:clamp(26px,6vw,52px);border:1px solid var(--line);border-radius:30px;background:rgba(255,255,255,.93);box-shadow:0 24px 80px #52607d1c}h1{margin:0 0 12px;font-size:clamp(32px,6vw,52px);line-height:1;letter-spacing:-.065em}p{margin:0;color:var(--muted);line-height:1.65}.eyebrow{margin-bottom:14px;color:var(--teal);font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.drop{display:flex;align-items:center;gap:16px;margin:30px 0 14px;padding:22px;border:2px dashed #c7cedb;border-radius:18px;cursor:pointer;transition:.2s}.drop:hover,.drop:focus-within,.drop.is-dragging{border-color:var(--accent);background:#faf9ff;transform:translateY(-1px)}.drop-icon{display:grid;place-items:center;flex:none;width:50px;height:50px;border-radius:15px;background:#eeeaff;color:var(--accent)}.drop-icon svg{width:23px;height:23px}.drop strong{display:block;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.drop small{color:var(--muted);font-size:12px}input{display:none}.button{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;border:0;border-radius:14px;padding:15px;background:var(--accent);color:#fff;font:inherit;font-weight:800;cursor:pointer;box-shadow:0 8px 20px #635bff30;transition:.2s}.button:hover{background:#5149eb;transform:translateY(-1px)}button:disabled{opacity:.75;cursor:wait;transform:none}.button svg{width:18px;height:18px}.spinner{display:none;animation:spin .8s linear infinite}.is-loading .spinner{display:block}.is-loading .upload-icon{display:none}.meter{height:8px;margin-top:22px;overflow:hidden;border-radius:99px;background:#eceef4}.meter span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--teal));transition:width .2s}.status{min-height:26px;margin-top:16px;word-break:break-word;font-size:14px;font-weight:600}.success{color:#16856f}.error{color:#c0392b}.result{display:inline-block;margin-top:8px;color:var(--accent);font-weight:700;word-break:break-all}.note{margin-top:22px;font-size:13px;color:#98a2b3}.limits{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.limits span{padding:5px 9px;border-radius:99px;background:#f3f1ff;color:#5a52d7;font-size:11px;font-weight:700}@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:520px){body{padding:14px}.shell{margin:2vh auto}.card{border-radius:22px}.drop{padding:18px}}
-    .copy{display:inline-block;margin:10px 0 0;padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--accent);font:inherit;font-size:12px;font-weight:800;cursor:pointer}.history{margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}.history h2{margin:0 0 10px;font-size:14px}.history-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}.history-list a{display:block;overflow:hidden;color:var(--accent);font-size:12px;text-overflow:ellipsis;white-space:nowrap}.history-list small{display:block;color:var(--muted);font-size:11px}
-   </style>
+    :root{font-family:Inter,system-ui,sans-serif;color:#172033;background:#f5f7fb;--accent:#635bff;--muted:#667085;--line:#dfe5ef}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:24px;background:radial-gradient(circle at 82% 0,#e8e3ff,transparent 34rem),#f5f7fb}.shell{width:min(680px,100%);margin:8vh auto}.brand{display:flex;align-items:center;gap:10px;margin-bottom:20px;font-weight:800}.mark{display:grid;place-items:center;width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#635bff,#159f8b);color:#fff}.card{padding:clamp(26px,6vw,52px);border:1px solid var(--line);border-radius:30px;background:#fffffff2;box-shadow:0 24px 80px #52607d1c}h1{margin:0 0 12px;font-size:clamp(32px,6vw,52px);line-height:1;letter-spacing:-.06em}p{margin:0;color:var(--muted);line-height:1.6}.auth{margin:24px 0}.auth label{display:block;margin:18px 0 8px;font-size:13px;font-weight:800}.auth input{display:block;width:100%;padding:14px;border:1px solid var(--line);border-radius:12px;background:#fff;font:inherit;letter-spacing:.25em;text-transform:uppercase}.auth button{margin-top:12px;padding:13px 18px;border:0;border-radius:12px;background:var(--accent);color:#fff;font:inherit;font-weight:800}.drop{display:flex;align-items:center;gap:16px;margin:30px 0 14px;padding:22px;border:2px dashed #c7cedb;border-radius:18px;cursor:pointer}.drop-icon{display:grid;place-items:center;width:50px;height:50px;border-radius:15px;background:#eeeaff;color:var(--accent);font-size:24px}input[type=file]{display:none}.limits{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.limits span{padding:5px 9px;border-radius:99px;background:#f3f1ff;color:#5a52d7;font-size:11px;font-weight:700}.meter{height:8px;margin-top:22px;overflow:hidden;border-radius:99px;background:#eceef4}.meter span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),#159f8b);transition:width .2s}.status{min-height:26px;margin-top:16px;font-size:14px;font-weight:600;word-break:break-word}.success{color:#16856f}.error{color:#c0392b}.result{display:inline-block;margin-top:8px;color:var(--accent);font-weight:700}.history{margin-top:24px;padding-top:18px;border-top:1px solid var(--line)}.history h2{margin:0 0 10px;font-size:14px}.history a{display:block;margin:8px 0;color:var(--accent);font-size:12px;word-break:break-all}
+  </style>
 </head>
 <body>
   <main class="shell"><div class="brand"><span class="mark">IH</span><span>Image Host</span></div><section class="card">
-    <div class="eyebrow">Private upload room</div><h1>Share a larger image.</h1>
-      <p>Upload one supported image from 1 KB up to 50 MB. Larger files are sent in small 1 MB chunks, saved securely, and the shareable link is stored on this device.</p>
-     <label class="drop" id="drop" for="image"><span class="drop-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span><span><strong id="file-name">Choose an image</strong><small>PNG, JPG, GIF, WebP, BMP, AVIF, or TIFF</small></span><input id="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif,image/tiff"></label>
-      <div class="limits"><span>1 KB minimum</span><span>1 MB chunks</span><span>50 MB maximum</span></div>
-      <button class="button" id="submit" type="button"><svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg><svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-opacity=".35"/><path d="M21 12a9 9 0 0 0-9-9"/></svg><span id="button-label">Upload image</span></button><div class="meter" aria-hidden="true"><span id="progress"></span></div><div class="status" id="status" role="status" aria-live="polite"></div><div class="history" id="history" hidden><h2>Saved on this device</h2><ul class="history-list" id="history-list"></ul></div><p class="note">This link expires as soon as this page is opened or after the upload completes. Need another upload? Use <strong>/more</strong> in Discord.</p>
+    <h1>Share a larger image.</h1>
+    <div class="auth" id="auth"><p>Enter your permanent upload code from Discord to unlock uploads.</p><form id="auth-form"><label for="access-code">Upload code</label><input id="access-code" maxlength="6" inputmode="text" autocomplete="one-time-code" placeholder="ABC123" required><button type="submit">Unlock upload page</button></form></div>
+    <div id="uploader" hidden><p>Choose an image and uploading starts immediately. Images up to 50 MB are supported.</p><label class="drop" for="image"><span class="drop-icon">↥</span><span><strong id="file-name">Choose an image</strong><small>PNG, JPG, GIF, WebP, BMP, AVIF, or TIFF</small></span><input id="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif,image/tiff"></label><div class="limits"><span>1 KB minimum</span><span>1 MB chunks</span><span>50 MB maximum</span></div><div class="meter"><span id="progress"></span></div></div>
+    <div class="status" id="status" role="status" aria-live="polite"></div><div class="history" id="history" hidden><h2>Saved on this device</h2><div id="history-list"></div></div>
   </section></main>
   <script>
-    const params = new URLSearchParams(location.search);
-     let session = params.get("session") || params.get("id") || "";
-     const pathSession = location.pathname.split("/").pop();
-     if (!session && /^upload-[a-z0-9-]+$/i.test(pathSession)) session = pathSession;
-    // Vercel deployments must use their same-origin proxy. Ignore stale
-    // api= URLs from older Discord links, which can point at a dead port.
-    const apiEndpoint = location.hostname.endsWith(".vercel.app")
-      ? "/api/more-upload"
-      : (params.get("api") || "/api/more-upload");
-    const input = document.querySelector("#image");
-     const button = document.querySelector("#submit");
-     button.remove();
-    const status = document.querySelector("#status");
-     const drop = document.querySelector("#drop");
-     const progress = document.querySelector("#progress");
-     const buttonLabel = document.querySelector("#button-label");
-    input.addEventListener("change", () => {
-      document.querySelector("#file-name").textContent = input.files[0] ? `${input.files[0].name} · ${formatSize(input.files[0].size)}` : "Choose an image";
-       status.className = "";
-       if (input.files[0]) startUpload(input.files[0]);
-    });
-     ["dragenter", "dragover"].forEach((eventName) => drop.addEventListener(eventName, (event) => { event.preventDefault(); drop.classList.add("is-dragging"); }));
-     ["dragleave", "drop"].forEach((eventName) => drop.addEventListener(eventName, (event) => { event.preventDefault(); drop.classList.remove("is-dragging"); }));
-     drop.addEventListener("drop", (event) => { if (event.dataTransfer.files[0]) { input.files = event.dataTransfer.files; input.dispatchEvent(new Event("change")); } });
-     function formatSize(bytes) { return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(bytes % (1024 * 1024) ? 1 : 0)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`; }
-     const historyKey = "image-host-upload-history";
-     function readHistory() { try { return JSON.parse(localStorage.getItem(historyKey) || "[]").filter((item) => item && item.url); } catch { return []; } }
-     function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (character) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" })[character]); }
-     function renderHistory() { const history = readHistory(); document.querySelector("#history").hidden = !history.length; document.querySelector("#history-list").innerHTML = history.map((item) => `<li><a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.name || item.url)}</a><small>${escapeHtml(item.url)}</small></li>`).join(""); }
-     function saveToDevice(item) { try { localStorage.setItem(historyKey, JSON.stringify([item, ...readHistory().filter((saved) => saved.url !== item.url)])); } catch {} renderHistory(); }
-     renderHistory();
-      if (!/^upload-[a-z0-9-]+$/i.test(session)) {
-        input.disabled = true;
-        button.disabled = true;
-        status.textContent = "This page is protected. Use /more in Discord to open an upload page.";
-        status.className = "error";
-      }
-      async function ensureSession() {
-       if (/^upload-[a-z0-9-]+$/i.test(session)) return session;
-       throw new Error("This upload page is protected. Use /more in Discord, or ask the bot owner for an owner upload link.");
-     }
-     function uploadChunk(endpoint, form, chunkNumber, chunkCount, uploadedBytes, totalBytes) {
-       return new Promise((resolve, reject) => {
-         const request = new XMLHttpRequest();
-         request.open("POST", endpoint);
-         request.timeout = 120000;
-         request.upload.addEventListener("progress", (event) => {
-           if (!event.lengthComputable) return;
-           const uploaded = Math.min(totalBytes, uploadedBytes + event.loaded);
-           const percent = Math.round((uploaded / totalBytes) * 100);
-           status.textContent = `Uploading image · ${percent}%`;
-           progress.style.width = `${percent}%`;
-         });
-         request.addEventListener("load", () => {
-           let result = {};
-           try { result = JSON.parse(request.responseText || "{}"); } catch {}
-           if (request.status >= 200 && request.status < 300) return resolve(result);
-           reject(new Error(result.error || `Upload failed (${request.status}).`));
-         });
-         request.addEventListener("error", () => reject(new Error("Could not reach the upload service. Please try again.")));
-         request.addEventListener("timeout", () => reject(new Error("The upload took too long. Please try again.")));
-         request.send(form);
-       });
-     }
-     async function uploadFile(file) {
-       await ensureSession();
-       const chunkSize = 1 * 1024 * 1024;
-       const chunkCount = Math.ceil(file.size / chunkSize);
-        const sendChunk = (index) => {
-         const start = index * chunkSize;
-         const end = Math.min(file.size, start + chunkSize);
-         const form = new FormData();
-         form.append("chunk", file.slice(start, end), file.name);
-         form.append("session", session);
-         form.append("index", String(index));
-         form.append("total", String(chunkCount));
-         form.append("filename", file.name);
-         form.append("contentType", file.type);
-          const chunkEndpoint = new URL(apiEndpoint, location.href);
-          // Use the query flag instead of a custom header. This keeps uploads
-          // simple on mobile browsers and avoids a CORS preflight through the
-          // Vercel proxy before every multipart chunk.
-          chunkEndpoint.searchParams.set("chunk", String(index));
-           return uploadChunk(chunkEndpoint, form, index, chunkCount, start, file.size);
-        };
-        // Upload every part except the last one together. The server uses the
-        // final part to assemble and commit the image, so send that part only
-        // after all earlier parts have arrived.
-        if (chunkCount > 1) await Promise.all(Array.from({ length: chunkCount - 1 }, (_value, index) => sendChunk(index)));
-        return sendChunk(chunkCount - 1);
-     }
-     function finishUploadRoom() {
-       drop.hidden = true;
-       document.querySelector(".limits").hidden = true;
-       button.hidden = true;
-       progress.style.width = "100%";
-        document.querySelector(".note").innerHTML = "<strong>Upload complete.</strong> Your link is saved on this device and in the Image Host database.";
-     }
-      async function startUpload(file) {
-      if (!file) { status.textContent = "Choose an image first."; status.className = "error"; return; }
-       if (file.size < 1024) { status.textContent = "This image is smaller than the 1 KB minimum."; status.className = "error"; return; }
-       if (file.size > 50 * 1024 * 1024) { status.textContent = "This image is larger than the 50 MB maximum."; status.className = "error"; return; }
-      if (!/^image\/(png|jpeg|gif|webp|bmp|avif|tiff)$/i.test(file.type)) { status.textContent = "Please choose a PNG, JPG, GIF, WebP, BMP, AVIF, or TIFF image."; status.className = "error"; return; }
-       button.disabled = true; button.classList.add("is-loading"); buttonLabel.textContent = "Preparing upload…"; status.textContent = "Preparing secure upload…"; status.className = ""; progress.style.width = "2%";
-      try {
-        const result = await uploadFile(file);
-        const apiOrigin = new URL(apiEndpoint, location.href).origin;
-        const url = new URL(result.url, apiOrigin).href;
-        status.className = "success";
-           saveToDevice({ url, name: result.name || file.name, size: result.size || file.size, savedAt: new Date().toISOString() });
-           status.innerHTML = `Uploaded successfully and saved on this device.<br><a class="result" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a><br><button class="copy" type="button" data-copy="${escapeHtml(url)}">Copy link</button>`;
-           status.querySelector("[data-copy]").addEventListener("click", async (event) => { await navigator.clipboard?.writeText(url); event.target.textContent = "Copied"; });
-          finishUploadRoom();
-      } catch (error) { status.textContent = error.message; status.className = "error"; }
-       finally { button.disabled = false; button.classList.remove("is-loading"); buttonLabel.textContent = "Upload image"; }
-      }
+    const input=document.querySelector("#image"), auth=document.querySelector("#auth"), uploader=document.querySelector("#uploader"), form=document.querySelector("#auth-form"), codeInput=document.querySelector("#access-code"), status=document.querySelector("#status"), progress=document.querySelector("#progress"), history=document.querySelector("#history"), historyList=document.querySelector("#history-list"), api="/api/more-upload", authApi="/api/more-auth", historyKey="image-host-upload-history";
+    let session="";
+    const readHistory=()=>{try{return JSON.parse(localStorage.getItem(historyKey)||"[]").filter(x=>x&&x.url)}catch{return[]}};
+    const escapeHtml=x=>String(x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    function renderHistory(){const items=readHistory();history.hidden=!items.length;historyList.innerHTML=items.map(x=>`<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">${escapeHtml(x.name||x.url)}<br><small>${escapeHtml(x.url)}</small></a>`).join("")}
+    function saveLink(item){try{localStorage.setItem(historyKey,JSON.stringify([item,...readHistory().filter(x=>x.url!==item.url)]))}catch{}renderHistory()}
+    renderHistory();
+    form.addEventListener("submit",async event=>{event.preventDefault();status.className="";status.textContent="Checking code…";try{const response=await fetch(authApi,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:codeInput.value})});const result=await response.json();if(!response.ok)throw new Error(result.error||"Invalid code.");session=result.session;auth.hidden=true;uploader.hidden=false;status.textContent="Unlocked. Choose an image to upload.";codeInput.value=""}catch(error){status.className="error";status.textContent=error.message}});
+    input.addEventListener("change",()=>{const file=input.files[0];if(file){document.querySelector("#file-name").textContent=`${file.name} · ${(file.size/1048576).toFixed(1)} MB`;startUpload(file)}});
+    function sendChunk(index,file,total){const size=1048576,start=index*size,end=Math.min(file.size,start+size),data=new FormData();data.append("chunk",file.slice(start,end),file.name);data.append("session",session);data.append("index",String(index));data.append("total",String(total));data.append("filename",file.name);data.append("contentType",file.type);return new Promise((resolve,reject)=>{const request=new XMLHttpRequest();request.open("POST",`${api}?chunk=${index}`);request.timeout=120000;request.upload.onprogress=e=>{if(e.lengthComputable)progress.style.width=`${Math.round(((start+e.loaded)/file.size)*100)}%`};request.onload=()=>{let result={};try{result=JSON.parse(request.responseText||"{}")}catch{}if(request.status>=200&&request.status<300)resolve(result);else reject(new Error(result.error||`Upload failed (${request.status}).`))};request.onerror=()=>reject(new Error("Could not reach the upload service. Please try again."));request.ontimeout=()=>reject(new Error("The upload took too long. Please try again."));request.send(data)})}
+    async function startUpload(file){if(!session)return;if(file.size<1024||file.size>50*1048576||!/^image\/(png|jpeg|gif|webp|bmp|avif|tiff)$/i.test(file.type)){status.className="error";status.textContent="Choose a supported image between 1 KB and 50 MB.";return}input.disabled=true;status.className="";status.textContent="Uploading image…";progress.style.width="2%";try{const total=Math.ceil(file.size/1048576),jobs=[];for(let i=0;i<total-1;i++)jobs.push(sendChunk(i,file,total));if(jobs.length)await Promise.all(jobs);const result=await sendChunk(total-1,file,total),url=new URL(result.url,location.origin).href;saveLink({url,name:result.name||file.name,size:result.size||file.size,savedAt:new Date().toISOString()});progress.style.width="100%";status.className="success";status.innerHTML=`Uploaded and saved.<br><a class="result" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>`;input.disabled=false}catch(error){status.className="error";status.textContent=error.message;input.disabled=false}}
   </script>
 </body>
 </html>
