@@ -1,4 +1,8 @@
 export default async function handler(request, response) {
+  response.setHeader("Access-Control-Allow-Origin", "*");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  if (request.method === "OPTIONS") return response.status(204).end();
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
     return response.status(405).send("Method not allowed");
