@@ -8,7 +8,9 @@ const Database = require("better-sqlite3");
 const app = express();
 const PORT = Number(process.env.PORT || 5000);
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const MAX_MORE_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_MORE_FILE_SIZE = 50 * 1024 * 1024;
+const MIN_MORE_FILE_SIZE = 1024;
+const MORE_CHUNK_SIZE = 3 * 1024 * 1024;
 const MAX_ARCHIVE_SIZE = 70 * 1024 * 1024;
 const uploadDirectory = path.join(__dirname, "uploads");
 const fileDirectory = path.join(uploadDirectory, "files");
@@ -110,7 +112,7 @@ const moreUpload = multer({
 });
 const chunkUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 3 * 1024 * 1024, files: 1 },
+  limits: { fileSize: MORE_CHUNK_SIZE, files: 1 },
 });
 const archiveExtensions = new Set([".zip", ".tar.xz", ".rar", ".7z"]);
 const archiveUpload = multer({
@@ -224,7 +226,12 @@ app.post("/api/upload", (request, response) => {
 });
 
 app.post("/api/more-upload", (request, response) => {
-  if (request.query?.chunk !== undefined) {
+  // The browser sends every larger upload as a 3 MB-or-smaller `chunk`.
+  // Also accept the explicit header so proxies that drop query strings do
+  // not route a chunk through the legacy `image` parser.
+  const isChunkedUpload = request.query?.chunk !== undefined
+    || request.headers["x-upload-mode"] === "chunked";
+  if (isChunkedUpload) {
     return chunkUpload.single("chunk")(request, response, async (error) => {
       if (error) {
         const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
@@ -234,7 +241,7 @@ app.post("/api/more-upload", (request, response) => {
       const index = Number(request.body?.index);
       const total = Number(request.body?.total);
       if (!/^upload-[a-z0-9-]+$/i.test(sessionToken) || !Number.isInteger(index) || !Number.isInteger(total)
-        || total < 1 || total > 34 || index < 0 || index >= total || !request.file) {
+         || total < 1 || total > 50 || index < 0 || index >= total || !request.file) {
         return response.status(400).json({ error: "Invalid upload chunk." });
       }
       const now = new Date().toISOString();
@@ -248,8 +255,11 @@ app.post("/api/more-upload", (request, response) => {
         if (index < total - 1) return response.json({ complete: false, index });
 
         const buffer = await assembleMoreChunks(sessionToken, total);
+         if (buffer.length < MIN_MORE_FILE_SIZE) {
+           return response.status(400).json({ error: "The file must be at least 1 KB." });
+         }
         if (buffer.length > MAX_MORE_FILE_SIZE) {
-          return response.status(413).json({ error: "That image is larger than the 100 MB limit." });
+          return response.status(413).json({ error: "That image is larger than the 50 MB limit." });
         }
         const contentType = String(request.body?.contentType || "");
         if (!isValidImageBuffer(buffer, contentType)) {
@@ -277,10 +287,13 @@ app.post("/api/more-upload", (request, response) => {
   }
   moreUpload.single("image")(request, response, async (error) => {
     if (error) {
-      if (error.code === "LIMIT_FILE_SIZE") return response.status(413).json({ error: "That image is larger than the 100 MB limit." });
+      if (error.code === "LIMIT_FILE_SIZE") return response.status(413).json({ error: "That image is larger than the 50 MB limit." });
       return response.status(400).json({ error: error.message || "Upload failed." });
     }
     if (!request.file) return response.status(400).json({ error: "Choose an image to upload." });
+    if (request.file.size < MIN_MORE_FILE_SIZE) {
+      return response.status(400).json({ error: "The file must be at least 1 KB." });
+    }
     if (!isValidImageBuffer(request.file.buffer, request.file.mimetype)) {
       return response.status(400).json({ error: "The file contents do not match a supported image type." });
     }
@@ -405,26 +418,4 @@ async function serveFile(request, response) {
     if (!file) return response.status(404).send("File not found");
     const filePath = path.join(fileDirectory, path.basename(file.stored_name));
     if (!file.data && !fs.existsSync(filePath)) return response.status(404).send("File data not found");
-    response.setHeader("Content-Type", file.content_type || "application/octet-stream");
-    response.setHeader("Content-Length", String(file.size_bytes));
-    response.setHeader("Content-Disposition", `attachment; filename="${file.original_name.replace(/["\r\n]/g, "")}"`);
-    response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    if (request.method === "HEAD") return response.end();
-    if (file.data) return response.end(file.data);
-    response.sendFile(filePath);
-  } catch (error) {
-    console.error("File read failed:", error);
-    response.status(500).send("File unavailable");
-  }
-}
-
-app.get("/file/:slug", serveFile);
-app.head("/file/:slug", serveFile);
-
-app.use((error, _request, response, _next) => {
-  console.error("Unhandled server error:", error);
-  response.status(500).json({ error: "Unexpected server error." });
-});
-
-app.listen(PORT, "0.0.0.0", () => console.log(`Image Host running on port ${PORT}`));
+    re
