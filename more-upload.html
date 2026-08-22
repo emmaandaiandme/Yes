@@ -48,10 +48,26 @@
         form.append("total", String(total));
         form.append("filename", file.name);
         form.append("contentType", file.type);
-         const response = await fetch(`${apiEndpoint}?chunk=${index}`, { method: "POST", body: form });
-        let result = {};
-        try { result = await response.json(); } catch { /* expired page or proxy error */ }
-        if (!response.ok) throw new Error(result.error || `Upload failed (${response.status}).`);
+         let response;
+         let result = {};
+         for (let attempt = 1; attempt <= 3; attempt += 1) {
+           try {
+             response = await fetch(`${apiEndpoint}?chunk=${index}`, { method: "POST", body: form });
+             try { result = await response.json(); } catch { result = {}; }
+             if (response.ok) break;
+             if (response.status < 500 || attempt === 3) {
+               throw new Error(result.error || `Upload failed (${response.status}).`);
+             }
+           } catch (error) {
+             if (attempt === 3) {
+               throw new Error(error.message === "Failed to fetch"
+                 ? `Could not reach the upload service on chunk ${index + 1}. Please try again.`
+                 : error.message);
+             }
+           }
+           status.textContent = `Retrying chunk ${index + 1}…`;
+           await new Promise((resolve) => setTimeout(resolve, attempt * 700));
+         }
         uploaded = result;
         const percent = Math.round(((index + 1) / total) * 100);
          status.textContent = `Uploading chunk ${index + 1} of ${total} · ${percent}%`;
