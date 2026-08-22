@@ -88,8 +88,7 @@
        await ensureSession();
        const chunkSize = 1 * 1024 * 1024;
        const chunkCount = Math.ceil(file.size / chunkSize);
-       let result = {};
-       for (let index = 0; index < chunkCount; index += 1) {
+        const sendChunk = (index) => {
          const start = index * chunkSize;
          const end = Math.min(file.size, start + chunkSize);
          const form = new FormData();
@@ -104,9 +103,13 @@
           // simple on mobile browsers and avoids a CORS preflight through the
           // Vercel proxy before every multipart chunk.
           chunkEndpoint.searchParams.set("chunk", String(index));
-          result = await uploadChunk(chunkEndpoint, form, index, chunkCount, start, file.size);
-       }
-       return result;
+           return uploadChunk(chunkEndpoint, form, index, chunkCount, start, file.size);
+        };
+        // Upload every part except the last one together. The server uses the
+        // final part to assemble and commit the image, so send that part only
+        // after all earlier parts have arrived.
+        if (chunkCount > 1) await Promise.all(Array.from({ length: chunkCount - 1 }, (_value, index) => sendChunk(index)));
+        return sendChunk(chunkCount - 1);
      }
      function finishUploadRoom() {
        drop.hidden = true;
