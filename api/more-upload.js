@@ -1,6 +1,9 @@
 export default async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // The browser uses this header to make sure every multipart request is
+  // routed through the chunk parser. It must be included in the preflight
+  // response when the static uploader is hosted on another origin.
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Upload-Mode");
   response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   if (request.method === "OPTIONS") return response.status(204).end();
   if (request.method !== "POST") {
