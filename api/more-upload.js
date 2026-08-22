@@ -11,10 +11,13 @@ export default async function handler(request, response) {
   if (!backendUrl) return response.status(500).json({ error: "BACKEND_URL is not configured" });
   try {
     const headers = {};
-    for (const header of ["content-type", "content-length"]) {
+    for (const header of ["content-type", "content-length", "x-upload-mode"]) {
       if (request.headers[header]) headers[header] = request.headers[header];
     }
-    const upstream = await fetch(`${backendUrl}/api/more-upload`, {
+    // Preserve ?chunk=N so the backend selects its 3 MB chunk parser instead
+    // of treating the multipart request as a legacy `image` upload.
+    const query = request.url?.includes("?") ? request.url.slice(request.url.indexOf("?")) : "";
+    const upstream = await fetch(`${backendUrl}/api/more-upload${query}`, {
       method: "POST",
       headers,
       body: request,
