@@ -34,11 +34,15 @@ const signatures = {
     && ["avif", "avis", "mif1", "msf1"].includes(buffer.toString("ascii", 8, 12)),
 };
 const isValidImageBuffer = (buffer, contentType) => Boolean(signatures[contentType]?.(buffer));
+const expiredPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Upload link expired</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f5f7fb;color:#172033;font:16px system-ui,sans-serif}.card{width:min(520px,100%);padding:40px 28px;text-align:center;background:#fff;border:1px solid #dfe5ef;border-radius:24px;box-shadow:0 18px 60px #52607d18}svg{width:112px;height:112px;margin:0 auto 20px}h1{margin:0 0 10px;letter-spacing:-.04em}p{margin:0;color:#667085;line-height:1.6}</style></head><body><main class="card"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="#eeeaff"/><path d="M38 48h44v42H38zM44 48v-8a16 16 0 0 1 32 0v8" fill="none" stroke="#635bff" stroke-width="7" stroke-linecap="round"/><circle cx="60" cy="67" r="4" fill="#635bff"/><path d="M60 71v9" stroke="#635bff" stroke-width="5" stroke-linecap="round"/></svg><h1>This upload link has expired</h1><p>For your security, larger upload links work once and expire when opened. Return to Discord and use <strong>/more</strong> to create a fresh link.</p></main></body></html>`;
 
 fs.mkdirSync(uploadDirectory, { recursive: true });
 fs.mkdirSync(fileDirectory, { recursive: true });
 const db = new Database(path.join(uploadDirectory, "data.db"));
 db.pragma("journal_mode = WAL");
+db.pragma("synchronous = NORMAL");
+db.pragma("busy_timeout = 5000");
+db.pragma("wal_autocheckpoint = 1000");
 db.exec(`
   CREATE TABLE IF NOT EXISTS hosted_images (
     id TEXT PRIMARY KEY,
@@ -58,10 +62,23 @@ db.exec(`
     size_bytes INTEGER NOT NULL,
     stored_name TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE
+    slug TEXT NOT NULL UNIQUE,
+    data BLOB
   );
   CREATE INDEX IF NOT EXISTS hosted_files_created_at_idx ON hosted_files (created_at DESC);
+  CREATE TABLE IF NOT EXISTS more_upload_sessions (
+    token TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    opened_at TEXT,
+    used_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS more_upload_sessions_expiry_idx ON more_upload_sessions (expires_at);
 `);
+if (!db.pragma("table_info(hosted_files)").some((column) => column.name === "data")) {
+  db.exec("ALTER TABLE hosted_files ADD COLUMN data BLOB");
+}
 
 const storage = multer.diskStorage({
   destination: (_request, _file, callback) => callback(null, uploadDirectory),
@@ -106,6 +123,19 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "100kb" }));
 app.use(express.static(__dirname, { extensions: ["html"] }));
 
+app.get("/image/upload-:owner", (request, response) => {
+  const token = `upload-${request.params.owner}`;
+  const now = new Date().toISOString();
+  db.prepare("DELETE FROM more_upload_sessions WHERE expires_at <= ? OR used_at IS NOT NULL").run(now);
+  const session = db.prepare(
+    `UPDATE more_upload_sessions SET opened_at = ?
+     WHERE token = ? AND opened_at IS NULL AND used_at IS NULL AND expires_at > ?
+     RETURNING token`,
+  ).get(now, token, now);
+  if (!session) return response.status(404).set("Cache-Control", "no-store").type("html").send(expiredPage);
+  response.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "more-upload.html"));
+});
+
 app.get("/api/health", async (_request, response) => {
   try {
     db.prepare("SELECT 1").get();
@@ -114,6 +144,19 @@ app.get("/api/health", async (_request, response) => {
     console.error("Health check failed:", error.message);
     response.status(503).json({ ok: false, error: "Database unavailable" });
   }
+});
+
+app.get("/api/more-page", (request, response) => {
+  const token = String(request.query?.id || "");
+  const now = new Date().toISOString();
+  db.prepare("DELETE FROM more_upload_sessions WHERE expires_at <= ? OR used_at IS NOT NULL").run(now);
+  const session = db.prepare(
+    `UPDATE more_upload_sessions SET opened_at = ?
+     WHERE token = ? AND opened_at IS NULL AND used_at IS NULL AND expires_at > ?
+     RETURNING token`,
+  ).get(now, token, now);
+  if (!session) return response.status(404).set("Cache-Control", "no-store").type("html").send(expiredPage);
+  response.set("Cache-Control", "no-store").sendFile(path.join(__dirname, "more-upload.html"));
 });
 
 app.post("/api/upload", (request, response) => {
@@ -174,7 +217,14 @@ app.post("/api/more-upload", (request, response) => {
     }
     const id = crypto.randomUUID();
     try {
-      const ownerId = String(request.body?.owner || "web").slice(0, 100);
+      const now = new Date().toISOString();
+      const session = db.prepare(
+        `UPDATE more_upload_sessions SET used_at = ?
+         WHERE token = ? AND opened_at IS NOT NULL AND used_at IS NULL AND expires_at > ?
+         RETURNING owner_id`,
+      ).get(now, String(request.body?.session || ""), now);
+      if (!session) return response.status(404).json({ error: "This upload link has expired. Use /more in Discord for a new one." });
+      const ownerId = session.owner_id;
       const originalName = request.file.originalname.slice(0, 500);
       db.prepare(
         `INSERT INTO hosted_images
@@ -217,8 +267,8 @@ app.post("/api/files", (request, response) => {
     try {
       db.prepare(
         `INSERT INTO hosted_files
-          (id, owner_id, original_name, content_type, size_bytes, stored_name, created_at, slug)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, owner_id, original_name, content_type, size_bytes, stored_name, created_at, slug, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         "api",
@@ -228,7 +278,11 @@ app.post("/api/files", (request, response) => {
         path.basename(request.file.filename),
         new Date().toISOString(),
         slug,
+        await fs.promises.readFile(request.file.path),
       );
+      // The database is the source of truth; do not keep a second full-size
+      // archive copy on disk after the insert succeeds.
+      await fs.promises.rm(request.file.path, { force: true });
       response.status(201).json({
         id,
         slug,
@@ -276,17 +330,18 @@ async function serveFile(request, response) {
   if (!/^host-p[0-9]{3}$/i.test(slug)) return response.status(400).send("Invalid file ID");
   try {
     const file = db.prepare(
-      "SELECT content_type, original_name, size_bytes, stored_name FROM hosted_files WHERE slug = ?",
+      "SELECT content_type, original_name, size_bytes, stored_name, data FROM hosted_files WHERE slug = ?",
     ).get(slug);
     if (!file) return response.status(404).send("File not found");
     const filePath = path.join(fileDirectory, path.basename(file.stored_name));
-    if (!fs.existsSync(filePath)) return response.status(404).send("File data not found");
+    if (!file.data && !fs.existsSync(filePath)) return response.status(404).send("File data not found");
     response.setHeader("Content-Type", file.content_type || "application/octet-stream");
     response.setHeader("Content-Length", String(file.size_bytes));
     response.setHeader("Content-Disposition", `attachment; filename="${file.original_name.replace(/["\r\n]/g, "")}"`);
     response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     response.setHeader("X-Content-Type-Options", "nosniff");
     if (request.method === "HEAD") return response.end();
+    if (file.data) return response.end(file.data);
     response.sendFile(filePath);
   } catch (error) {
     console.error("File read failed:", error);
