@@ -12,6 +12,7 @@ const MAX_MORE_FILE_SIZE = 100 * 1024 * 1024;
 const MAX_ARCHIVE_SIZE = 70 * 1024 * 1024;
 const uploadDirectory = path.join(__dirname, "uploads");
 const fileDirectory = path.join(uploadDirectory, "files");
+const partsDirectory = path.join(uploadDirectory, ".more-parts");
 const supportedTypes = new Set([
   "image/png",
   "image/jpeg",
@@ -107,6 +108,10 @@ const moreUpload = multer({
     callback(null, true);
   },
 });
+const chunkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 3 * 1024 * 1024, files: 1 },
+});
 const archiveExtensions = new Set([".zip", ".tar.xz", ".rar", ".7z"]);
 const archiveUpload = multer({
   storage: multer.diskStorage({
@@ -122,6 +127,15 @@ const archiveUpload = multer({
     callback(null, true);
   },
 });
+
+async function assembleMoreChunks(session, total) {
+  const chunks = [];
+  for (let index = 0; index < total; index += 1) {
+    chunks.push(await fs.promises.readFile(path.join(partsDirectory, `${session}-${index}.part`)));
+  }
+  await Promise.all(chunks.map((_chunk, index) => fs.promises.rm(path.join(partsDirectory, `${session}-${index}.part`), { force: true })));
+  return Buffer.concat(chunks);
+}
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "100kb" }));
@@ -210,6 +224,57 @@ app.post("/api/upload", (request, response) => {
 });
 
 app.post("/api/more-upload", (request, response) => {
+  if (request.query?.chunk !== undefined) {
+    return chunkUpload.single("chunk")(request, response, async (error) => {
+      if (error) {
+        const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+        return response.status(status).json({ error: error.code === "LIMIT_FILE_SIZE" ? "Each upload part must be 3 MB or smaller." : error.message || "Upload failed." });
+      }
+      const sessionToken = String(request.body?.session || "");
+      const index = Number(request.body?.index);
+      const total = Number(request.body?.total);
+      if (!/^upload-[a-z0-9-]+$/i.test(sessionToken) || !Number.isInteger(index) || !Number.isInteger(total)
+        || total < 1 || total > 34 || index < 0 || index >= total || !request.file) {
+        return response.status(400).json({ error: "Invalid upload chunk." });
+      }
+      const now = new Date().toISOString();
+      const open = db.prepare(
+        "SELECT 1 FROM more_upload_sessions WHERE token = ? AND opened_at IS NOT NULL AND used_at IS NULL AND expires_at > ?",
+      ).get(sessionToken, now);
+      if (!open) return response.status(404).json({ error: "This upload link has expired. Use /more in Discord for a new one." });
+      try {
+        await fs.promises.mkdir(partsDirectory, { recursive: true });
+        await fs.promises.writeFile(path.join(partsDirectory, `${sessionToken}-${index}.part`), request.file.buffer);
+        if (index < total - 1) return response.json({ complete: false, index });
+
+        const buffer = await assembleMoreChunks(sessionToken, total);
+        if (buffer.length > MAX_MORE_FILE_SIZE) {
+          return response.status(413).json({ error: "That image is larger than the 100 MB limit." });
+        }
+        const contentType = String(request.body?.contentType || "");
+        if (!isValidImageBuffer(buffer, contentType)) {
+          return response.status(400).json({ error: "The file contents do not match a supported image type." });
+        }
+        const consumed = db.prepare(
+          `UPDATE more_upload_sessions SET used_at = ?
+           WHERE token = ? AND opened_at IS NOT NULL AND used_at IS NULL AND expires_at > ?
+           RETURNING owner_id`,
+        ).get(now, sessionToken, now);
+        if (!consumed) return response.status(404).json({ error: "This upload link has expired. Use /more in Discord for a new one." });
+        const id = crypto.randomUUID();
+        const originalName = String(request.body?.filename || "image").slice(0, 500);
+        db.prepare(
+          `INSERT INTO hosted_images
+            (id, owner_id, original_name, content_type, size_bytes, data, created_at, slug)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(id, consumed.owner_id, originalName, contentType, buffer.length, buffer, new Date().toISOString(), id);
+        return response.status(201).json({ id, name: originalName, size: buffer.length, url: `/image/${id}` });
+      } catch (chunkError) {
+        console.error("Chunked upload failed:", chunkError);
+        return response.status(400).json({ error: chunkError.message || "Upload failed." });
+      }
+    });
+  }
   moreUpload.single("image")(request, response, async (error) => {
     if (error) {
       if (error.code === "LIMIT_FILE_SIZE") return response.status(413).json({ error: "That image is larger than the 100 MB limit." });
@@ -351,15 +416,4 @@ async function serveFile(request, response) {
   } catch (error) {
     console.error("File read failed:", error);
     response.status(500).send("File unavailable");
-  }
-}
-
-app.get("/file/:slug", serveFile);
-app.head("/file/:slug", serveFile);
-
-app.use((error, _request, response, _next) => {
-  console.error("Unhandled server error:", error);
-  response.status(500).json({ error: "Unexpected server error." });
-});
-
-app.listen(PORT, "0.0.0.0", () => console.log(`Image Host running on port ${PORT}`));
+        
