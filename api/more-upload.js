@@ -16,7 +16,7 @@ export default async function handler(request, response) {
     }
     // Preserve ?chunk=N so the backend selects its 3 MB chunk parser instead
     // of treating the multipart request as a legacy `image` upload.
-    const query = request.url?.includes("?") ? request.url.slice(request.url.indexOf("?")) : "";
+    const query = new URL(request.url || "/", "https://vercel.invalid").search;
     const upstream = await fetch(`${backendUrl}/api/more-upload${query}`, {
       method: "POST",
       headers,
