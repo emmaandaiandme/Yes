@@ -52,7 +52,8 @@ db.exec(`
     size_bytes INTEGER NOT NULL,
     data BLOB NOT NULL,
     created_at TEXT NOT NULL,
-    slug TEXT NOT NULL UNIQUE
+    slug TEXT NOT NULL UNIQUE,
+    view_count INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS hosted_files (
     id TEXT PRIMARY KEY,
@@ -76,6 +77,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS more_upload_sessions_expiry_idx ON more_upload_sessions (expires_at);
 `);
+if (!db.pragma("table_info(hosted_images)").some((column) => column.name === "view_count")) {
+  db.exec("ALTER TABLE hosted_images ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0");
+}
 if (!db.pragma("table_info(hosted_files)").some((column) => column.name === "data")) {
   db.exec("ALTER TABLE hosted_files ADD COLUMN data BLOB");
 }
@@ -303,12 +307,13 @@ async function serveImage(request, response) {
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/i.test(id)) return response.status(400).send("Invalid image ID");
 
   try {
-    const image = db.prepare(
+     const image = db.prepare(
       `SELECT content_type, original_name, size_bytes, data
        FROM hosted_images WHERE id = ? OR slug = ?
        ORDER BY CASE WHEN slug = ? THEN 0 ELSE 1 END LIMIT 1`,
     ).get(id, id, id);
     if (!image) return response.status(404).send("Image not found");
+     db.prepare("UPDATE hosted_images SET view_count = view_count + 1 WHERE id = ? OR slug = ?").run(id, id);
     response.setHeader("Content-Type", image.content_type);
     response.setHeader("Content-Length", String(image.size_bytes));
     response.setHeader("Content-Disposition", `inline; filename="${image.original_name.replace(/["\r\n]/g, "")}"`);
