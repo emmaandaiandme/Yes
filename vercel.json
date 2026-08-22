@@ -8,6 +8,6 @@
     }
   ],
   "env": {
-    "BACKEND_URL": "https://029c7ba6-57ff-4510-ac3d-6161717031a9-00-2glzke7kxjdcp.archer.replit.dev/"
+    "BACKEND_URL": "https://029c7ba6-57ff-4510-ac3d-6161717031a9-00-2glzke7kxjdcp.archer.replit.dev:3001/"
   }
 }
